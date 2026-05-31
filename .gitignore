@@ -1,0 +1,20 @@
+# 权重/大文件
+*.pth
+*.pt
+*.ckpt
+*.bin
+pretrained_weight/
+saved_models/
+checkpoints/
+
+# 日志
+logs/
+*.log
+
+# 环境
+.env
+.venv/
+venv/
+
+# VSCode
+.vscode/
