@@ -23,6 +23,7 @@ from collections import OrderedDict
 # from MambaCD.changedetection.models.ChangeDecoder_spatialMamba_small_ICFKFusion_DualTransformer_MDTA_four_blocks_with_one_embeding_layer import ChangeDecoder
 # from MambaCD.changedetection.models.ChangeDecoder_hny import ChangeDecoder
 from MambaCD.changedetection.models.ChangeDecoder_StarBlock import ChangeDecoder
+#from MambaCD.changedetection.models.ChangeDecoder_SFSConv import ChangeDecoder
 
 import torch
 import torch.nn as nn

@@ -7,6 +7,7 @@ from  mamba_ssm import Mamba
 
 from MambaCD.changedetection.models.Spatial_Mamba import SpatialMambaBlock
 from MambaCD.classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
+from MambaCD.changedetection.models.sfs_conv import GaborFreqTransform
 
 
 def to_3d(x):
@@ -91,7 +92,7 @@ class DFFN(nn.Module):
         self.dwconv = nn.Conv2d(hidden_features * 2, hidden_features * 2, kernel_size=3, stride=1, padding=1,
                                 groups=hidden_features * 2, bias=bias)
 
-        self.fft = nn.Parameter(torch.ones((dim, 1, 1, self.patch_size, self.patch_size // 2 + 1)))
+        self.gabor_freq = GaborFreqTransform(dim)
         self.project_out = nn.Conv2d(hidden_features, dim, kernel_size=1, bias=bias)
 
     def forward(self, x):
@@ -108,14 +109,7 @@ class DFFN(nn.Module):
 
         x = F.gelu(x1) * x2
         x = self.project_out(x)
-
-        x_patch = rearrange(x, 'b c (h patch1) (w patch2) -> b c h w patch1 patch2', patch1=self.patch_size,
-                            patch2=self.patch_size)
-        x_patch_fft = torch.fft.rfft2(x_patch.float())
-        x_patch_fft = x_patch_fft * self.fft
-        x_patch = torch.fft.irfft2(x_patch_fft, s=(self.patch_size, self.patch_size))
-        x = rearrange(x_patch, 'b c h w patch1 patch2 -> b c (h patch1) (w patch2)', patch1=self.patch_size,
-                      patch2=self.patch_size)
+        x = self.gabor_freq(x)
         return x
 
 class SpatialOperation(nn.Module):
@@ -155,7 +149,7 @@ class StarModule(nn.Module):
 
         self.norm = LayerNorm(dim, LayerNorm_type='WithBias')
 
-        self.fft_FSAS = nn.Parameter(torch.ones((dim, 1, 1, self.patch_size, self.patch_size // 2 + 1)))
+        self.gabor_freq = GaborFreqTransform(dim)
 
         self.spatial = SpatialOperation(dim)
 
@@ -182,16 +176,7 @@ class StarModule(nn.Module):
         v = self.SMB(v)
 
 
-        q_patch = rearrange(q, 'b c (h patch1) (w patch2) -> b c h w patch1 patch2', patch1=self.patch_size,
-                            patch2=self.patch_size)
-
-        q_fft = torch.fft.rfft2(q_patch.float())
-
-        out = q_fft * self.fft_FSAS
-        out = torch.fft.irfft2(out, s=(self.patch_size, self.patch_size))
-        out = rearrange(out, 'b c h w patch1 patch2 -> b c (h patch1) (w patch2)', patch1=self.patch_size,
-                        patch2=self.patch_size)
-
+        out = self.gabor_freq(q)
         out = self.norm(out)
 
         # star

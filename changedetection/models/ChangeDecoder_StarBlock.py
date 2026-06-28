@@ -7,6 +7,7 @@ from einops import rearrange
 import numbers
 # from MambaCD.changedetection.models.StarIR import StarModule, DFFN
 from MambaCD.changedetection.models.StarIR_FMB import StarModule, DFFN, StarBlock
+from MambaCD.changedetection.models.sfs_conv import GaborFPU
 # from MambaCD.changedetection.models.StarIR_orignal import StarModule, DFFN
 
 
@@ -105,6 +106,16 @@ class ChangeDecoder(nn.Module):
         self.starblock3 = StarBlock(dim=128, channel_first=channel_first, norm_layer=norm_layer, ffn_expansion_factor=3, bias=False,  **kwargs)
         self.starblock4 = StarBlock(dim=128, channel_first=channel_first, norm_layer=norm_layer, ffn_expansion_factor=3, bias=False,  **kwargs)
 
+        # SFS-Conv FPU branch: fractional Gabor frequency perception at each stage
+        self.fpu_4 = GaborFPU(128, 128)
+        self.fpu_3 = GaborFPU(128, 128)
+        self.fpu_2 = GaborFPU(128, 128)
+        self.fpu_1 = GaborFPU(128, 128)
+        self.fpu_fuse_4 = nn.Conv2d(256, 128, kernel_size=1, bias=False)
+        self.fpu_fuse_3 = nn.Conv2d(256, 128, kernel_size=1, bias=False)
+        self.fpu_fuse_2 = nn.Conv2d(256, 128, kernel_size=1, bias=False)
+        self.fpu_fuse_1 = nn.Conv2d(256, 128, kernel_size=1, bias=False)
+
 
     def _upsample_add(self, x, y):
         _, _, H, W = y.size()
@@ -128,24 +139,16 @@ class ChangeDecoder(nn.Module):
 
         # p4 =  self.starmodule1(p40)
         # p4 = self.fuse_layer_4(torch.cat([p41, p42], dim=1))
-        p4 = self.starblock1(p40)
+        p4 = self.fpu_fuse_4(torch.cat([self.starblock1(p40), self.fpu_4(p40)], dim=1))
 
         '''
             Stage II
         '''
         p30 = self.dim_convert31(torch.cat([pre_feat_3, post_feat_3], dim=1))
 
-        # p31 = self.st_block_31(p30)
-        #
-        # p32 = self.at_layer_31(p30)
-
-        # p3 = self.starmodule2(p30)
-        # p3 = self.fuse_layer_3(torch.cat([p31, p32], dim=1))
         p30 = self._upsample_add(p4, p30)
 
-        p3 = self.starblock1(p30)
-
-        # p3 = self.smooth_layer_3(p3)
+        p3 = self.fpu_fuse_3(torch.cat([self.starblock2(p30), self.fpu_3(p30)], dim=1))
 
         '''
             Stage III
@@ -153,33 +156,16 @@ class ChangeDecoder(nn.Module):
 
         p20 = self.dim_convert21(torch.cat([pre_feat_2, post_feat_2], dim=1))
 
-        # p21 = self.st_block_21(p20)
-        #
-        # p22 = self.at_layer_21(p20)
-        #
-        # p2 = self.fuse_layer_2(torch.cat([p21, p22], dim=1))
-        # p2 = self.starmodule3(p20)
         p20 = self._upsample_add(p3, p20)
-        p2 = self.starblock3(p20)
-        # p2 = self.smooth_layer_2(p2)
+        p2 = self.fpu_fuse_2(torch.cat([self.starblock3(p20), self.fpu_2(p20)], dim=1))
 
         '''
             Stage IV
         '''
         p10 = self.dim_convert11(torch.cat([pre_feat_1, post_feat_1], dim=1))
 
-        # p11 = self.st_block_11(p10)
-        #
-        # p12 = self.at_layer_21(p10)
-        #
-        # p1 = self.fuse_layer_1(torch.cat([p11, p12], dim=1))
-
         p10 = self._upsample_add(p2, p10)
-        p1 = self.starblock3(p10)
-
-        # p1 = self.starmodule4(p10)
-        # p1 = self._upsample_add(p2, p1)
-        # p1 = self.smooth_layer_1(p1)
+        p1 = self.fpu_fuse_1(torch.cat([self.starblock4(p10), self.fpu_1(p10)], dim=1))
 
         return p1
 
