@@ -8,7 +8,7 @@ import time
 
 import numpy as np
 
-from MambaCD.changedetection.configs.config import get_config
+from MambaCD.changedetection.configs.spatialmamba.config import get_config
 
 import torch
 import torch.nn.functional as F
@@ -18,6 +18,13 @@ from tqdm import tqdm
 from MambaCD.changedetection.datasets.make_data_loader import ChangeDetectionDatset, make_data_loader
 from MambaCD.changedetection.utils_func.metrics import Evaluator
 from MambaCD.changedetection.models.MambaBCD_spatial import STMambaBCD
+from MambaCD.changedetection.models.ChangeDecoder_Star_GaborFPU import ChangeDecoder
+
+# HAM-CD model stack (must match MambaBCD_spatial.py):
+#   Encoder : Backbone_SpatialMamba
+#   Decoder : ChangeDecoder_Star_GaborFPU (StarModule + DFFN w/ Gabor + GaborFPU branch)
+HAM_CD_DECODER = "ChangeDecoder_Star_GaborFPU"
+
 import imageio
 import MambaCD.changedetection.utils_func.lovasz_loss as L
 
@@ -31,35 +38,25 @@ class Inference(object):
 
         self.deep_model = STMambaBCD(
             pretrained=args.pretrained_weight_path,
-            patch_size=config.MODEL.VSSM.PATCH_SIZE,
-            in_chans=config.MODEL.VSSM.IN_CHANS,
+            patch_size=config.MODEL.SPATIALMAMBA.PATCH_SIZE,
+            in_chans=config.MODEL.SPATIALMAMBA.IN_CHANS,
             num_classes=config.MODEL.NUM_CLASSES,
-            depths=config.MODEL.VSSM.DEPTHS,
-            dims=config.MODEL.VSSM.EMBED_DIM,
+            depths=config.MODEL.SPATIALMAMBA.DEPTHS,
+            dims=config.MODEL.SPATIALMAMBA.EMBED_DIM,
             # ===================
-            ssm_d_state=config.MODEL.VSSM.SSM_D_STATE,
-            ssm_ratio=config.MODEL.VSSM.SSM_RATIO,
-            ssm_rank_ratio=config.MODEL.VSSM.SSM_RANK_RATIO,
-            ssm_dt_rank=("auto" if config.MODEL.VSSM.SSM_DT_RANK == "auto" else int(config.MODEL.VSSM.SSM_DT_RANK)),
-            ssm_act_layer=config.MODEL.VSSM.SSM_ACT_LAYER,
-            ssm_conv=config.MODEL.VSSM.SSM_CONV,
-            ssm_conv_bias=config.MODEL.VSSM.SSM_CONV_BIAS,
-            ssm_drop_rate=config.MODEL.VSSM.SSM_DROP_RATE,
-            ssm_init=config.MODEL.VSSM.SSM_INIT,
-            forward_type=config.MODEL.VSSM.SSM_FORWARDTYPE,
+            ssm_d_state=config.MODEL.SPATIALMAMBA.D_STATE,
             # ===================
-            mlp_ratio=config.MODEL.VSSM.MLP_RATIO,
-            mlp_act_layer=config.MODEL.VSSM.MLP_ACT_LAYER,
-            mlp_drop_rate=config.MODEL.VSSM.MLP_DROP_RATE,
+            mlp_ratio=config.MODEL.SPATIALMAMBA.MLP_RATIO,
             # ===================
-            drop_path_rate=config.MODEL.DROP_PATH_RATE,
-            patch_norm=config.MODEL.VSSM.PATCH_NORM,
-            norm_layer=config.MODEL.VSSM.NORM_LAYER,
-            downsample_version=config.MODEL.VSSM.DOWNSAMPLE,
-            patchembed_version=config.MODEL.VSSM.PATCHEMBED,
-            gmlp=config.MODEL.VSSM.GMLP,
+            dt_init=config.MODEL.SPATIALMAMBA.DT_INIT,
             use_checkpoint=config.TRAIN.USE_CHECKPOINT,
         )
+        if not isinstance(self.deep_model.decoder, ChangeDecoder):
+            raise RuntimeError(
+                f"MambaBCD_spatial decoder mismatch: expected {HAM_CD_DECODER}, "
+                f"got {type(self.deep_model.decoder).__name__}"
+            )
+        print(f"[HAM-CD] decoder={HAM_CD_DECODER}, encoder=Backbone_SpatialMamba")
         self.deep_model = self.deep_model.cuda()
         self.epoch = args.max_iters // args.batch_size
 
@@ -137,7 +134,7 @@ class Inference(object):
 def main():
     parser = argparse.ArgumentParser(description="Training on SYSU/LEVIR-CD+/WHU-CD dataset")
     parser.add_argument('--cfg', type=str,
-                        default='/data/lgl/hny/MambaCD/changedetection/configs/vssm1/vssm_base_224.yaml')
+                        default='/data/lgl/hny/MambaCD/changedetection/configs/spatialmamba/spatialmamba_small.yaml')
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
