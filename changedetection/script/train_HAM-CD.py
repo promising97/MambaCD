@@ -1,15 +1,38 @@
 import sys
 
-sys.path.append('/data/lgl/hny')
+sys.path.append('/root/autodl-tmp/MambaCD')
 
 import argparse
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'  # 指定只有第二张GPU对PyTorch可见
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # 指定只有第二张GPU对PyTorch可见
 import time
 
 import numpy as np
 
+
+class Tee:
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, data):
+        for f in self.files:
+            f.write(data)
+            f.flush()
+
+    def flush(self):
+        for f in self.files:
+            f.flush()
+
+
+def setup_log_file(log_path):
+    log_dir = os.path.dirname(log_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+    log_file = open(log_path, 'a', encoding='utf-8', buffering=1)
+    sys.stdout = Tee(sys.stdout, log_file)
+    sys.stderr = Tee(sys.stderr, log_file)
+    print(f'Logging to {log_path}')
 
 from MambaCD.changedetection.configs.spatialmamba.config import get_config
 # from MambaCD.changedetection.configs.config import get_config
@@ -91,7 +114,7 @@ class Trainer(object):
             pre_change_imgs, post_change_imgs, labels, _ = data
 
             pre_change_imgs = pre_change_imgs.cuda().float()
-            post_change_imgs = post_change_imgs.cuda()
+            post_change_imgs = post_change_imgs.cuda().float()
             labels = labels.cuda().long()
 
             output_1 = self.deep_model(pre_change_imgs, post_change_imgs)
@@ -100,19 +123,16 @@ class Trainer(object):
             ce_loss_1 = F.cross_entropy(output_1, labels, ignore_index=255)
             lovasz_loss = L.lovasz_softmax(F.softmax(output_1, dim=1), labels, ignore=255)
 
-            output_1 = torch.mean(output_1, dim=1, keepdim=True)
-            # print('shapes=', output_1.shape, labels.shape)
-
-            edge_loss = self.edge_loss(output_1, labels)
-
             # main_loss = ce_loss_1 + 0.75 * lovasz_loss + 0.25 * edge_loss
             main_loss = ce_loss_1 + 2 * lovasz_loss
             final_loss = main_loss
 
             final_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.deep_model.parameters(), max_norm=1.0)
             self.optim.step()
             if (itera + 1) % 10 == 0:
-                print(f'iter is {itera + 1}, overall loss is {final_loss}')
+                print(f'iter is {itera + 1}, ce is {ce_loss_1.item():.4f}, '
+                      f'lovasz is {lovasz_loss.item():.4f}, overall loss is {final_loss.item():.4f}')
                 if (itera + 1) % 2000 == 0:
                     self.deep_model.eval()
                     rec, pre, oa, f1_score, iou, kc = self.validation()
@@ -137,7 +157,7 @@ class Trainer(object):
             for itera, data in enumerate(val_data_loader):
                 pre_change_imgs, post_change_imgs, labels, _ = data
                 pre_change_imgs = pre_change_imgs.cuda().float()
-                post_change_imgs = post_change_imgs.cuda()
+                post_change_imgs = post_change_imgs.cuda().float()
                 labels = labels.cuda().long()
 
                 output_1 = self.deep_model(pre_change_imgs, post_change_imgs)
@@ -162,20 +182,20 @@ class Trainer(object):
 def main():
     parser = argparse.ArgumentParser(description="Trainin   g on SYSU/LEVIR-CD+/WHU-CD dataset")
     parser.add_argument('--cfg', type=str,
-                        default='/data/lgl/hny/MambaCD/changedetection/configs/spatialmamba/spatialmamba_small.yaml')
+                        default='/root/autodl-tmp/MambaCD/changedetection/configs/spatialmamba/spatialmamba_small.yaml')
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
         default=None,
         nargs='+',
     )
-    parser.add_argument('--pretrained_weight_path', type=str)
+    parser.add_argument('--pretrained_weight_path', type=str, default='/root/autodl-tmp/MambaCD/pretrained_weight/spatialmamba_small_224_1k.pth')
     parser.add_argument('--dataset', type=str, default='California_for_GLCD_DA_all')
     parser.add_argument('--type', type=str, default='train')
-    parser.add_argument('--train_dataset_path', type=str, default='/data/lgl/hny/datasets/California_for_GLCD_DA/train')
-    parser.add_argument('--train_data_list_path', type=str, default='/data/lgl/hny/datasets/California_for_GLCD_DA/train_list.txt')
-    parser.add_argument('--test_dataset_path', type=str, default='/data/lgl/hny/datasets/California_for_GLCD_DA/test')
-    parser.add_argument('--test_data_list_path', type=str, default='/data/lgl/hny/datasets/California_for_GLCD_DA/test_list.txt')
+    parser.add_argument('--train_dataset_path', type=str, default='/root/autodl-tmp/California_for_GLCD_DA/train')
+    parser.add_argument('--train_data_list_path', type=str, default='/root/autodl-tmp/California_for_GLCD_DA/train_list.txt')
+    parser.add_argument('--test_dataset_path', type=str, default='/root/autodl-tmp/California_for_GLCD_DA/test')
+    parser.add_argument('--test_data_list_path', type=str, default='/root/autodl-tmp/California_for_GLCD_DA/test_list.txt')
     parser.add_argument('--shuffle', type=bool, default=True)
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--crop_size', type=int, default=256)
@@ -184,15 +204,19 @@ def main():
     parser.add_argument('--start_iter', type=int, default=0)
     parser.add_argument('--cuda', type=bool, default=True)
     parser.add_argument('--max_iters', type=int, default=300000)
-    parser.add_argument('--model_type', type=str, default='HAM-CD_StarBlock_onlySMB_batch8_all_SAR_iter300000')
-    parser.add_argument('--model_param_path', type=str, default='/data/lgl/hny/MambaCD/changedetection/saved_models')
+    parser.add_argument('--model_type', type=str, default='LEM-CD_GaborFPU_batch8_all_SAR_iter300000')
+    parser.add_argument('--model_param_path', type=str, default='/root/autodl-tmp/MambaCD/changedetection/saved_models')
 
     parser.add_argument('--resume', type=str)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=5e-4)
+    parser.add_argument('--log_path', type=str, default=None,
+                        help='Save training stdout/stderr to this log file')
 
     args = parser.parse_args()
+    if args.log_path:
+        setup_log_file(args.log_path)
     with open(args.train_data_list_path, "r") as f:
         # data_name_list = f.read()
         data_name_list = [data_name.strip() for data_name in f]

@@ -73,7 +73,8 @@ class FractionalGaborFilter(nn.Module):
         return weight.repeat(out_channels, 1, 1, 1)
 
     def forward(self, x):
-        return sum(f * x for f in self.filters.unbind(0))
+        # Average multi-orientation/scale Gabor responses to avoid activation blow-up.
+        return sum(f * x for f in self.filters.unbind(0)) / self.filters.shape[0]
 
 
 class GaborSingle(nn.Module):

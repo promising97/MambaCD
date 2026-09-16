@@ -11,6 +11,10 @@ checkpoints/
 logs/
 *.log
 
+# Python
+__pycache__/
+*.pyc
+
 # 环境
 .env
 .venv/
@@ -18,3 +22,5 @@ venv/
 
 # VSCode
 .vscode/
+# 实验结果图
+results/

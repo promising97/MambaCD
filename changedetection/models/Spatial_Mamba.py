@@ -69,42 +69,11 @@ class StateFusion(nn.Module):
         return torch.nn.functional.pad(input_tensor, padding, mode='replicate')
 
     def forward(self, h):
-
-        if self.training:
-            h1 = F.conv2d(self.padding(h, (1,1,1,1)), self.kernel_3,   padding=0, dilation=1, groups=self.dim)
-            h2 = F.conv2d(self.padding(h, (3,3,3,3)), self.kernel_3_1, padding=0, dilation=3, groups=self.dim)
-            h3 = F.conv2d(self.padding(h, (5,5,5,5)), self.kernel_3_2, padding=0, dilation=5, groups=self.dim)
-            out = self.alpha[0]*h1 + self.alpha[1]*h2 + self.alpha[2]*h3
-            return out
-
-        else:
-            if not hasattr(self, "_merge_weight"):
-                self._merge_weight = torch.zeros((self.dim, 1, 11, 11), device=h.device)
-                self._merge_weight[:, :, 4:7, 4:7] = self.alpha[0]*self.kernel_3
-
-                self._merge_weight[:, :, 2:3, 2:3] = self.alpha[1]*self.kernel_3_1[:,:,0:1,0:1]
-                self._merge_weight[:, :, 2:3, 5:6] = self.alpha[1]*self.kernel_3_1[:,:,0:1,1:2]
-                self._merge_weight[:, :, 2:3, 8:9] = self.alpha[1]*self.kernel_3_1[:,:,0:1,2:3]
-                self._merge_weight[:, :, 5:6, 2:3] = self.alpha[1]*self.kernel_3_1[:,:,1:2,0:1]
-                self._merge_weight[:, :, 5:6, 5:6] += self.alpha[1]*self.kernel_3_1[:,:,1:2,1:2]
-                self._merge_weight[:, :, 5:6, 8:9] = self.alpha[1]*self.kernel_3_1[:,:,1:2,2:3]
-                self._merge_weight[:, :, 8:9, 2:3] = self.alpha[1]*self.kernel_3_1[:,:,2:3,0:1]
-                self._merge_weight[:, :, 8:9, 5:6] = self.alpha[1]*self.kernel_3_1[:,:,2:3,1:2]
-                self._merge_weight[:, :, 8:9, 8:9] = self.alpha[1]*self.kernel_3_1[:,:,2:3,2:3]
-
-                self._merge_weight[:, :, 0:1, 0:1] = self.alpha[2]*self.kernel_3_2[:,:,0:1,0:1]
-                self._merge_weight[:, :, 0:1, 5:6] = self.alpha[2]*self.kernel_3_2[:,:,0:1,1:2]
-                self._merge_weight[:, :, 0:1, 10:11] = self.alpha[2]*self.kernel_3_2[:,:,0:1,2:3]
-                self._merge_weight[:, :, 5:6, 0:1] = self.alpha[2]*self.kernel_3_2[:,:,1:2,0:1]
-                self._merge_weight[:, :, 5:6, 5:6] += self.alpha[2]*self.kernel_3_2[:,:,1:2,1:2]
-                self._merge_weight[:, :, 5:6, 10:11] = self.alpha[2]*self.kernel_3_2[:,:,1:2,2:3]
-                self._merge_weight[:, :, 10:11, 0:1] = self.alpha[2]*self.kernel_3_2[:,:,2:3,0:1]
-                self._merge_weight[:, :, 10:11, 5:6] = self.alpha[2]*self.kernel_3_2[:,:,2:3,1:2]
-                self._merge_weight[:, :, 10:11, 10:11] = self.alpha[2]*self.kernel_3_2[:,:,2:3,2:3]
-
-            out = DepthwiseFunction.apply(h, self._merge_weight, None, 11//2, 11//2, False)
-
-            return out
+        # Always use the conv path; merged DepthwiseFunction requires GPU-matched dwconv2d kernels.
+        h1 = F.conv2d(self.padding(h, (1, 1, 1, 1)), self.kernel_3, padding=0, dilation=1, groups=self.dim)
+        h2 = F.conv2d(self.padding(h, (3, 3, 3, 3)), self.kernel_3_1, padding=0, dilation=3, groups=self.dim)
+        h3 = F.conv2d(self.padding(h, (5, 5, 5, 5)), self.kernel_3_2, padding=0, dilation=5, groups=self.dim)
+        return self.alpha[0] * h1 + self.alpha[1] * h2 + self.alpha[2] * h3
 
 class StructureAwareSSM(nn.Module):
     def __init__(

@@ -7,6 +7,7 @@ from MambaCD.changedetection.models.Spatial_Mamba_backbone import Backbone_Spati
 from MambaCD.changedetection.models.Mamba_backbone import Backbone_VSSM
 from MambaCD.classification.models.vmamba import VSSM, LayerNorm2d, VSSBlock, Permute
 import os
+import glob
 import time
 import math
 import copy
@@ -34,10 +35,57 @@ from timm.models.layers import DropPath, trunc_normal_
 from fvcore.nn import FlopCountAnalysis, flop_count_str, flop_count, parameter_count
 
 
+def _resolve_pretrained_path(pretrained):
+    if pretrained:
+        if os.path.exists(pretrained):
+            return pretrained
+        return None
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    search_dirs = [
+        repo_root,
+        os.path.join(repo_root, 'pretrained_weight'),
+        os.path.join(repo_root, 'pretrained_weights'),
+        os.path.join(repo_root, 'changedetection', 'pretrained_weight'),
+        os.path.join(repo_root, 'changedetection', 'pretrained_weights'),
+        os.getcwd(),
+        os.path.join(os.getcwd(), 'pretrained_weight'),
+        os.path.join(os.getcwd(), 'pretrained_weights'),
+    ]
+
+    common_names = [
+        'vssm_tiny_0229_ckpt_epoch_222.pth',
+        'vssm_small_0229_ckpt_epoch_222.pth',
+        'vssm_base_0229_ckpt_epoch_237.pth',
+        'vmamba_tiny_0229_ckpt_epoch_222.pth',
+        'vmamba_small_0229_ckpt_epoch_222.pth',
+        'vmamba_base_0229_ckpt_epoch_237.pth',
+        'spatialmamba_small.pth',
+        'spatialmamba_small_224_1k.pth',
+        'MambaBCD_spatial.pth',
+    ]
+
+    for root in search_dirs:
+        for name in common_names:
+            path = os.path.join(root, name)
+            if os.path.exists(path):
+                return path
+
+        for pattern in ('*.pth', '*.pt', '*.ckpt'):
+            matches = sorted(glob.glob(os.path.join(root, pattern)))
+            if matches:
+                return matches[0]
+
+    return None
+
+
 class STMambaBCD(nn.Module):
     def __init__(self, pretrained, **kwargs):
         super(STMambaBCD, self).__init__()
-        self.encoder = Backbone_SpatialMamba(out_indices=(0, 1, 2, 3), pretrained=pretrained, **kwargs)
+        resolved_pretrained = _resolve_pretrained_path(pretrained)
+        if resolved_pretrained is not None:
+            print(f"Using pretrained weight: {resolved_pretrained}")
+        self.encoder = Backbone_SpatialMamba(out_indices=(0, 1, 2, 3), pretrained=resolved_pretrained, **kwargs)
         
         _NORMLAYERS = dict(
             ln=nn.LayerNorm,
@@ -87,3 +135,4 @@ class STMambaBCD(nn.Module):
         output = self.main_clf(output)
         output = F.interpolate(output, size=pre_data.size()[-2:], mode='bilinear')
         return output
+
