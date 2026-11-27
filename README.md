@@ -1,3 +1,18 @@
+# LEM-CD research code
+
+本仓库基于 ChangeMamba 保存异源光学与 SAR 变化检测的研究代码。当前开发内容包括 Gabor/FPU、COPE-S 和 DFGF 模块、对应的训练与推理入口，以及 Gloucester 数据集加载支持。模块名称、实现与实验设置以源码及运行配置为准。
+
+- 主模型入口：`changedetection/models/MambaBCD_spatial_COPE_S_DFGF.py`。
+- 训练入口：`changedetection/script/train_MambaBCD_spatial_COPE_S_DFGF.py`。
+- 推理入口：`changedetection/script/infer_MambaBCD_spatial_COPE_S_DFGF.py`。
+- Gloucester I 启动示例：`changedetection/script/train_gloucester_i_COPE_S_DFGF.sh`。
+- 本地环境、数据路径与权重需另行准备；不随本次代码上传。
+- 对比实验独立保存在私密仓库 [LEM-CD-comparison](https://github.com/promising97/LEM-CD-comparison)，需对应账号访问权限。
+
+`docs/` 和 `readme_new/` 保留研究过程中的方法说明与绘图资料；其中不同日期的模块命名不自动代表同一实现版本。下面保留 ChangeMamba 原项目说明、引用和使用指引，原作者版权及许可证继续适用。
+
+---
+
 <div align="center">
 <h1 align="center">ChangeMamba</h1>
 

@@ -207,7 +207,13 @@ class DamageAssessmentDatset(Dataset):
 
 
 def make_data_loader(args, **kwargs):  # **kwargs could be omitted
-    if 'SYSU' in args.dataset or 'LEVIR-CD+' in args.dataset or 'WHU' in args.dataset or 'California' in args.dataset:
+    if (
+        'SYSU' in args.dataset
+        or 'LEVIR-CD+' in args.dataset
+        or 'WHU' in args.dataset
+        or 'California' in args.dataset
+        or 'Gloucester' in args.dataset
+    ):
         dataset = ChangeDetectionDatset(args.train_dataset_path, args.train_data_name_list, args.crop_size, args.max_iters, args.type)
         # train_sampler = DistributedSampler(dataset, shuffle=True)
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=args.shuffle, **kwargs, num_workers=16,

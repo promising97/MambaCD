@@ -24,3 +24,7 @@ venv/
 .vscode/
 # 实验结果图
 results/
+
+# Generated experiment reports and figure reconstruction intermediates
+changedetection/reports/Gloucester_I_COPE-S_DFGF/
+docs/figures/**/image2ppt_run/
